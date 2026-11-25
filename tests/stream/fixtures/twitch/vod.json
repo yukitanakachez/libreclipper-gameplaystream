@@ -1,0 +1,117 @@
+{
+ "id": "v123",
+ "title": "[683/730] 🔴 KRILLION -> CHESS -> WHEEL OF SIEGE -> GTA 6 LATER 🔴",
+ "duration": 18839,
+ "timestamp": 1795381700,
+ "uploader": "Some Streamer",
+ "uploader_id": "somestreamer",
+ "chapters": [
+  {
+   "start_time": 0,
+   "end_time": 4451,
+   "title": "Just Chatting"
+  },
+  {
+   "start_time": 4451,
+   "end_time": 10660,
+   "title": "Chess"
+  },
+  {
+   "start_time": 10660,
+   "end_time": 12567,
+   "title": "Just Chatting"
+  },
+  {
+   "start_time": 12567,
+   "end_time": 13111,
+   "title": "Chess"
+  },
+  {
+   "start_time": 13111,
+   "end_time": 13418,
+   "title": "Rainbow Six Siege"
+  },
+  {
+   "start_time": 13418,
+   "end_time": 14712,
+   "title": "Chess"
+  },
+  {
+   "start_time": 14712,
+   "end_time": 17680,
+   "title": "Rainbow Six Siege"
+  },
+  {
+   "start_time": 17680,
+   "end_time": 18839,
+   "title": "Just Chatting"
+  }
+ ],
+ "live_status": "was_live",
+ "formats": [
+  {
+   "format_id": "sb1",
+   "width": 160,
+   "height": 90,
+   "fps": 0.010616274749190508,
+   "vcodec": "none",
+   "acodec": "none"
+  },
+  {
+   "format_id": "sb0",
+   "width": 220,
+   "height": 124,
+   "fps": 0.010616274749190508,
+   "vcodec": "none",
+   "acodec": "none"
+  },
+  {
+   "format_id": "Audio_Only",
+   "width": null,
+   "height": null,
+   "fps": null,
+   "vcodec": "none",
+   "acodec": "mp4a.40.2"
+  },
+  {
+   "format_id": "160p",
+   "width": 284,
+   "height": 160,
+   "fps": 30.001,
+   "vcodec": "avc1.4D400C",
+   "acodec": "mp4a.40.2"
+  },
+  {
+   "format_id": "360p",
+   "width": 640,
+   "height": 360,
+   "fps": 30.001,
+   "vcodec": "avc1.4D401E",
+   "acodec": "mp4a.40.2"
+  },
+  {
+   "format_id": "480p",
+   "width": 852,
+   "height": 480,
+   "fps": 30.001,
+   "vcodec": "avc1.4D401F",
+   "acodec": "mp4a.40.2"
+  },
+  {
+   "format_id": "720p60",
+   "width": 1280,
+   "height": 720,
+   "fps": 60.0,
+   "vcodec": "avc1.4D4020",
+   "acodec": "mp4a.40.2"
+  },
+  {
+   "format_id": "1080p60",
+   "width": 1920,
+   "height": 1080,
+   "fps": 60.0,
+   "vcodec": "avc1.64002A",
+   "acodec": "mp4a.40.2"
+  }
+ ]
+}

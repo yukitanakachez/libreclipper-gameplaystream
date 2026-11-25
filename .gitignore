@@ -1,0 +1,31 @@
+jobs/
+stream-jobs/
+node_modules/
+.venv/
+__pycache__/
+.DS_Store
+config.yaml
+settings.json
+.superpowers/
+tests/fixtures/shots.mp4
+assets/face_landmarker.task
+.conda-tools/
+.tools/
+.venv
+.venv.nosync/
+.conda-tools
+.conda-tools.nosync/
+
+# iCloud conflict copies ("file 2.py") must never be committed
+* [0-9].*
+* [0-9]
+clips/
+music/
+
+# Stream clipper: the engine wheel is built into the agent folder before each upload
+agents/gameplay-clipper/vendor/
+
+# Local runs and promo renders never go in the repo
+out/
+*.mp4
+!agents/gameplay-clipper/tests/sample-stream.mp4

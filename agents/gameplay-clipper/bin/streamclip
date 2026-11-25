@@ -1,0 +1,6 @@
+#!/bin/sh
+# The workspace machine's `streamclip`: install.sh puts this at /usr/local/bin/streamclip, over
+# the one pip writes, so every engine command runs with the agent's settings, whichever shell
+# starts it.
+. /etc/streamclip-env.sh
+exec python3 -m streamclip "$@"

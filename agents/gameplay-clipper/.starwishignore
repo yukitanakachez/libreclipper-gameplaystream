@@ -1,0 +1,16 @@
+# Not uploaded at publish (same syntax as .gitignore). The builds re-create these.
+node_modules/
+.harness/
+.copilot-pkg/
+.pydeps/
+preset/codex-catalog.json
+__pycache__/
+.venv/
+*.log
+# Keys go in with `starwish credentials set <name>`, never in a file.
+.env
+.env.*
+
+# The engine wheel: git ignores it, but the upload needs it
+!vendor/
+!vendor/*.whl

@@ -1,0 +1,51 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["candidates"],
+  "properties": {
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["n", "keep", "score", "reason", "start", "end", "title", "caption",
+                     "hashtags", "beats", "protect"],
+        "properties": {
+          "n": {"type": "integer"},
+          "keep": {"type": "boolean"},
+          "score": {"type": "integer"},
+          "reason": {"type": "string"},
+          "start": {"type": "number"},
+          "end": {"type": "number"},
+          "title": {"type": "string"},
+          "caption": {"type": "string"},
+          "hashtags": {"type": "array", "items": {"type": "string"}},
+          "beats": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "t"],
+              "properties": {
+                "kind": {"type": "string", "enum": ["payoff", "reaction", "hard_cut"]},
+                "t": {"type": "number"}
+              }
+            }
+          },
+          "protect": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["start", "end"],
+              "properties": {
+                "start": {"type": "number"},
+                "end": {"type": "number"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

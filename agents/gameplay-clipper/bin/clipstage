@@ -1,0 +1,206 @@
+#!/usr/bin/env bash
+# clipstage: runs one streamclip stage in the background and reports on it in short calls.
+#
+# The harness abandons any command that prints nothing for 300 seconds, and finding or making
+# clips takes longer than that. So the agent starts a stage and then polls it:
+#
+#   clipstage start find|judge|make     returns at once: "started"
+#   clipstage poll  find|judge|make     returns within about 30 s, with one of:
+#       running: <where the job is>                       exit 0
+#       done: <where the job is>                          exit 0
+#       refused: <the reason, for the customer>           exit 2
+#       failed: <the reason>, then the end of the log     exit 1
+#
+# The stage's arguments come from files the agent writes with write_file, never from the
+# command line, so a customer's link, file name or creator name is never read by a shell:
+#   /job/run/source   the Twitch link or the video file's path      (find)
+#   /job/run/clips    how many clips, 1 to 10 (default 6)           (find)
+#   /job/run/creator  the creator's name for the tag (optional)     (find)
+#   /job/run/raw      the judge tool's judge_raw.json (optional)    (judge)
+# The job folder is /job/work and the clips go to /job/output. Each stage's log, exit code and
+# last progress line are kept in /job/run/. While a stage runs, each new line it prints is
+# passed on to the customer with `starwish-job progress`.
+
+ROOT="${CLIPSTAGE_ROOT:-/job}"
+RUN="$ROOT/run"
+JOB="$ROOT/work"
+OUT="$ROOT/output"
+WAIT="${CLIPSTAGE_WAIT:-30}"
+
+usage() {
+  echo "usage: clipstage start|poll find|judge|make" >&2
+  exit 64
+}
+
+# The first line of a file, without its line break; empty when there is none.
+first_line() {
+  [ -f "$1" ] || return 0
+  head -n 1 "$1" | tr -d '\r\n'
+}
+
+# Sets ARGS to the stage's streamclip arguments, or prints why it cannot and returns 1.
+build_args() {
+  case "$1" in
+    find)
+      local source clips creator
+      source="$(first_line "$RUN/source")"
+      if [ -z "$source" ]; then
+        echo "error: write the Twitch link or the video file's path to $RUN/source first"
+        return 1
+      fi
+      clips="$(first_line "$RUN/clips")"
+      clips="${clips:-6}"
+      case "$clips" in
+        [1-9] | 10) ;;
+        *) echo "error: $RUN/clips must hold a whole number from 1 to 10, not '$clips'"; return 1 ;;
+      esac
+      ARGS=(find "$source" --job "$JOB" --clips "$clips")
+      creator="$(first_line "$RUN/creator")"
+      if [ -n "$creator" ]; then ARGS+=(--creator "$creator"); fi
+      ;;
+    judge)
+      local raw
+      raw="$(first_line "$RUN/raw")"
+      ARGS=(judge "$JOB")
+      if [ -n "$raw" ]; then ARGS+=(--raw "$raw"); fi
+      ;;
+    make)
+      ARGS=(make "$JOB" --out "$OUT")
+      ;;
+  esac
+}
+
+start() {
+  local stage="$1"
+  if [ -f "$RUN/$stage.pid" ]; then
+    echo "already started: run 'clipstage poll $stage'"
+    return 0
+  fi
+  build_args "$stage" || return 65
+  mkdir -p "$RUN"
+  # Detached from the calling command, so it keeps running after this call returns.
+  if command -v setsid >/dev/null 2>&1; then
+    nohup setsid bash "$0" _run "$stage" </dev/null >/dev/null 2>&1 &
+  else
+    nohup bash "$0" _run "$stage" </dev/null >/dev/null 2>&1 &
+  fi
+  echo "$!" >"$RUN/$stage.pid"
+  date +%s >"$RUN/$stage.began"
+  echo "started: run 'clipstage poll $stage' until it says done, refused or failed"
+  if [ "$stage" = find ]; then
+    # Which machine the job landed on: Starwish's machines differ several-fold in speed.
+    echo "machine: $(lscpu 2>/dev/null | sed -n 's/^Model name:[[:space:]]*//p' | head -n 1), "\
+"$(nproc 2>/dev/null) processors usable of $(nproc --all 2>/dev/null)"
+  fi
+}
+
+# The background half of `start`: the stage itself, its log and its exit code.
+run_stage() {
+  local stage="$1" code
+  build_args "$stage" >"$RUN/$stage.log" 2>&1 || { echo 1 >"$RUN/$stage.exit"; return; }
+  # Every line is stamped with the time it was printed, so the job's log shows how long
+  # each step took (Yuki chooses the price and time limit from those numbers).
+  {
+    streamclip "${ARGS[@]}" 2>&1
+    echo "$?" >"$RUN/$stage.code"
+  } | while IFS= read -r said; do
+    printf '%s %s\n' "$(date -u +%H:%M:%S)" "$said"
+  done >"$RUN/$stage.log"
+  code="$(first_line "$RUN/$stage.code")"
+  echo "${code:-1}" >"$RUN/$stage.exit.partial" && mv "$RUN/$stage.exit.partial" "$RUN/$stage.exit"
+}
+
+# The stage's log without the time stamps' noise from its libraries: MediaPipe and TensorFlow
+# Lite print glog lines (W0000 …), INFO:/WARNING: lines and, at exit, a harmless traceback.
+# What is left is the engine's own lines, fit for the customer to see.
+engine_lines() {
+  grep -v -E '^[0-9:]+ ([IWEF][0-9]{4} |(INFO|WARNING|ERROR): |Exception ignored|Traceback |[[:space:]]|[A-Za-z]*Error: |[[:space:]]*$)' \
+    "$RUN/$1.log" 2>/dev/null
+}
+
+# How long the stage ran, and the steps it said, with their times ("Still working" left out).
+# Only the last 40 lines, except the camera's: make prints more than 40 for five clips, and
+# run 10 lost the line saying whether the streamer's camera was found.
+timeline() {
+  local stage="$1" began
+  began="$(first_line "$RUN/$stage.began")"
+  if [ -n "$began" ]; then echo "took $(( $(date +%s) - began )) s"; fi
+  echo "--- the $stage stage, step by step (UTC) ---"
+  engine_lines "$stage" | grep -v ' Still working' | awk -v keep=40 '
+    { said[NR] = $0 }
+    END {
+      for (i = 1; i <= NR; i++)
+        if (i > NR - keep || said[i] ~ /(Looking for the streamer|Camera: |camera could not be looked for)/)
+          print said[i]
+    }'
+}
+
+poll() {
+  local stage="$1" waited=0 status line code
+  if [ ! -f "$RUN/$stage.pid" ]; then
+    echo "not started: run 'clipstage start $stage' first"
+    return 1
+  fi
+  while [ ! -f "$RUN/$stage.exit" ] && [ "$waited" -lt "$WAIT" ]; do
+    sleep 1
+    waited=$((waited + 1))
+  done
+  status="$(streamclip status "$JOB" 2>/dev/null | head -n 1)"
+
+  if [ ! -f "$RUN/$stage.exit" ]; then
+    local pid
+    pid="$(first_line "$RUN/$stage.pid")"
+    if ! kill -0 "$pid" 2>/dev/null; then
+      sleep 1                         # it may have finished between the two checks
+      if [ ! -f "$RUN/$stage.exit" ]; then
+        echo "failed: the $stage stage stopped without finishing"
+        echo "--- the end of the $stage log ---"
+        tail -n 15 "$RUN/$stage.log" 2>/dev/null
+        return 1
+      fi
+    else
+      # The customer sees the stage's own latest line, once.
+      line="$(engine_lines "$stage" | tail -n 1 | cut -d ' ' -f 2- | cut -c 1-120)"
+      if [ -n "$line" ] && [ "$line" != "$(first_line "$RUN/$stage.said")" ]; then
+        printf '%s\n' "$line" >"$RUN/$stage.said"
+        starwish-job progress "$line" >/dev/null 2>&1 || true
+      fi
+      echo "running: ${status:-$stage}"
+      return 0
+    fi
+  fi
+
+  code="$(first_line "$RUN/$stage.exit")"
+  if [ "$code" = 0 ]; then
+    echo "done: ${status:-$stage}"
+    timeline "$stage"
+    return 0
+  fi
+  case "$status" in
+    failed:*)
+      # The engine wrote its reason into the job's status, a refusal included (exit 2).
+      if [ "$code" = 2 ]; then
+        echo "refused: ${status#failed: }"
+        timeline "$stage"
+        return 2
+      fi
+      echo "$status"
+      ;;
+    *)
+      # Nothing recorded: the command itself was wrong. Its log says how.
+      echo "failed: streamclip $stage exited $code"
+      ;;
+  esac
+  echo "--- the end of the $stage log ---"
+  tail -n 15 "$RUN/$stage.log" 2>/dev/null
+  return 1
+}
+
+[ "$#" -eq 2 ] || usage
+case "$2" in find | judge | make) ;; *) usage ;; esac
+case "$1" in
+  start) start "$2" ;;
+  poll) poll "$2" ;;
+  _run) run_stage "$2" ;;
+  *) usage ;;
+esac

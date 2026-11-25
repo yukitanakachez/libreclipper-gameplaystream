@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stream clipper test page</title>
+<style>
+  :root {
+    --ink: #17181a;
+    --muted: #5d6066;
+    --line: #d9dadd;
+    --paper: #ffffff;
+    --wash: #f4f4f2;
+    --accent: #d7ff3e;
+    --good: #1d7a3a;
+    --bad: #b3261e;
+    --run: #8a5a00;
+  }
+  * { box-sizing: border-box; }
+  html { font-size: 15px; }
+  body {
+    margin: 0;
+    background: var(--wash);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 20px; margin: 0 0 14px; font-weight: 700; }
+  h2 { font-size: 16px; margin: 0 0 10px; font-weight: 700; }
+  section { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
+  label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 3px; }
+  input, select, button { font: inherit; font-size: 15px; }
+  input[type=text], input[type=number], select {
+    width: 100%; padding: 7px 9px; border: 1px solid #b9bbbf; border-radius: 6px; background: #fff; color: var(--ink);
+  }
+  button {
+    padding: 8px 16px; border: 1px solid var(--ink); border-radius: 6px; background: var(--ink); color: #fff;
+    cursor: pointer; font-weight: 600;
+  }
+  button.plain { background: #fff; color: var(--ink); }
+  button:disabled { opacity: .5; cursor: default; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+  .error { color: var(--bad); font-weight: 600; }
+
+  /* 1. The request */
+  #request { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr) 84px minmax(0, 1.2fr) auto; gap: 10px; align-items: end; }
+  #drop {
+    border: 1px dashed #9a9ca1; border-radius: 6px; padding: 6px 9px; min-height: 38px; display: flex; align-items: center; gap: 8px;
+    background: #fafafa; font-size: 13px; color: var(--muted); overflow: hidden;
+  }
+  #drop.over { border-color: var(--ink); background: var(--accent); color: var(--ink); }
+  #drop input[type=file] { font-size: 13px; flex: 1 1 auto; min-width: 0; }
+  #drop-hint { flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #request-note { margin-top: 8px; font-size: 13px; min-height: 19px; }
+  #earlier { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+  #earlier label { margin: 0; white-space: nowrap; }
+  #earlier select { flex: 0 1 520px; min-width: 0; }
+
+  /* 2. The stages */
+  #stream-head { margin-bottom: 10px; }
+  #stream-title { font-size: 17px; font-weight: 700; overflow-wrap: anywhere; }
+  #stream-extras { font-size: 13px; color: var(--muted); }
+  #stages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .stage { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-width: 0; }
+  .stage .name { font-weight: 700; }
+  .stage .state { font-size: 13px; font-weight: 600; margin-left: 6px; }
+  .stage .step { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; min-height: 19px; }
+  .stage.waiting .state { color: var(--muted); }
+  .stage.running { border-color: var(--run); }
+  .stage.running .state { color: var(--run); }
+  .stage.done .state { color: var(--good); }
+  .stage.failed { border-color: var(--bad); }
+  .stage.failed .state { color: var(--bad); }
+  #failure { margin-top: 10px; padding: 10px 12px; border-left: 4px solid var(--bad); background: #fdf0ef; display: none; overflow-wrap: anywhere; }
+  #notes { margin: 8px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
+
+  /* 3. The curve */
+  #curve-wrap { position: relative; }
+  #curve { width: 100%; height: 140px; display: block; }
+  #curve-axis { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-top: 2px; }
+  #curve-length { font-weight: 700; color: var(--ink); }
+  #curve .mark { cursor: pointer; }
+  #curve .mark:hover polygon, #curve .mark:focus polygon { stroke-width: 2.5; }
+  #tip {
+    position: absolute; z-index: 2; display: none; pointer-events: none; max-width: 320px;
+    background: var(--ink); color: #fff; font-size: 13px; padding: 7px 9px; border-radius: 6px;
+  }
+  #tip b { color: var(--accent); }
+
+  /* 4. Candidates and clips */
+  #results { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 14px; align-items: start; }
+  #results > section { margin-bottom: 0; }
+  .cand { border-top: 1px solid var(--line); padding: 8px 0; cursor: pointer; }
+  .cand:first-child { border-top: 0; }
+  .cand-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .num { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tag { font-size: 12px; font-weight: 700; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); white-space: nowrap; }
+  .tag.kept { background: var(--accent); border-color: #9fbf1f; }
+  .tag.dropped { color: var(--muted); }
+  .tag.weak { background: #fff1d6; border-color: #e0b04f; }
+  .reason { overflow-wrap: anywhere; }
+  .fired { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+  .sheet { margin-top: 8px; display: none; }
+  .sheet img { width: 100%; border: 1px solid var(--line); border-radius: 4px; }
+  .cand.open .sheet { display: block; }
+  #clips-out { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
+  .clip { border: 1px solid var(--line); border-radius: 8px; padding: 10px; min-width: 0; }
+  .clip video { width: 100%; aspect-ratio: 9 / 16; background: #000; border-radius: 4px; display: block; }
+  .clip-title { font-weight: 700; margin-top: 8px; overflow-wrap: anywhere; }
+  .clip-facts { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+  .knobs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .knobs .sounds { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); margin: 0; grid-column: 1 / -1; }
+  .knobs button { grid-column: 1 / -1; }
+  .empty { color: var(--muted); font-size: 13px; }
+
+  @media (max-width: 900px) {
+    #request { grid-template-columns: 84px minmax(0, 1fr) auto; }
+    #request .wide { grid-column: 1 / -1; }
+    #results { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 520px) {
+    #stages { grid-template-columns: minmax(0, 1fr); }
+    #earlier { flex-wrap: wrap; }
+    #earlier select { flex-basis: 100%; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Stream clipper test page</h1>
+
+  <section aria-label="New job">
+    <div id="request">
+      <div class="wide">
+        <label for="source">Twitch link</label>
+        <input type="text" id="source" placeholder="https://www.twitch.tv/videos/…" autocomplete="off">
+      </div>
+      <div class="wide">
+        <label for="file">or a video file</label>
+        <div id="drop"><input type="file" id="file" accept="video/*,audio/*"><span id="drop-hint">or drop it here</span></div>
+      </div>
+      <div>
+        <label for="clips">Clips</label>
+        <input type="number" id="clips" min="1" max="10" value="6">
+      </div>
+      <div>
+        <label for="creator">Creator (optional)</label>
+        <input type="text" id="creator" autocomplete="off">
+      </div>
+      <div><button id="run">Run</button></div>
+    </div>
+    <div id="request-note" class="muted"></div>
+    <div id="earlier">
+      <label for="jobs">Earlier jobs</label>
+      <select id="jobs"><option value="">—</option></select>
+    </div>
+  </section>
+
+  <section aria-label="Progress">
+    <div id="stream-head">
+      <div id="stream-title" class="muted">No job open.</div>
+      <div id="stream-extras"></div>
+    </div>
+    <div id="stages">
+      <div class="stage waiting" data-stage="find"><span class="name">find</span><span class="state">waiting</span><div class="step"></div></div>
+      <div class="stage waiting" data-stage="judge"><span class="name">judge</span><span class="state">waiting</span><div class="step"></div></div>
+      <div class="stage waiting" data-stage="make"><span class="name">make</span><span class="state">waiting</span><div class="step"></div></div>
+    </div>
+    <div id="failure" role="alert"></div>
+    <ul id="notes"></ul>
+  </section>
+
+  <section aria-label="Excitement curve">
+    <h2>Excitement across the stream</h2>
+    <div id="curve-wrap">
+      <div id="curve"></div>
+      <div id="curve-axis"><span>0:00</span><span id="curve-length">—</span></div>
+      <div id="tip"></div>
+    </div>
+  </section>
+
+  <div id="results">
+    <section aria-label="Candidates">
+      <h2>Candidates</h2>
+      <div id="candidates"><div class="empty">The shortlist shows up here once find is done.</div></div>
+    </section>
+    <section aria-label="Clips">
+      <h2>Clips</h2>
+      <div id="clips-out"><div class="empty">Finished clips show up here once make is done.</div></div>
+    </section>
+  </div>
+</main>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const ACTIVE = ["queued", "find", "judge", "make"];
+const ORDER = ["find", "judge", "make"];
+let current = null;          // the open job's id
+let pollTimer = null;
+let pollToken = 0;
+let shown = {};              // what each part was last drawn from, so a poll redraws only what changed
+let pendingFile = null;
+
+function esc(text) {
+  return String(text == null ? "" : text).replace(/[&<>"']/g, (c) =>
+    ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"})[c]);
+}
+function clock(seconds) {
+  const s = Math.max(0, Math.round(seconds || 0));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}` : `${m}:${String(r).padStart(2, "0")}`;
+}
+function length(seconds) {
+  const s = Math.round(seconds || 0), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return h ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m ${String(s % 60).padStart(2, "0")}s`;
+}
+function fileUrl(path) {
+  return `/api/jobs/${encodeURIComponent(current)}/files/${path.split("/").map(encodeURIComponent).join("/")}`;
+}
+async function api(method, url, body, raw) {
+  const init = {method, headers: {}};
+  if (raw !== undefined) { init.body = raw; }
+  else if (body !== undefined) { init.body = JSON.stringify(body); init.headers["Content-Type"] = "application/json"; }
+  const response = await fetch(url, init);
+  let data = null;
+  try { data = await response.json(); } catch (e) { data = null; }
+  if (!response.ok) {
+    let reason = data && data.detail;
+    if (Array.isArray(reason)) reason = reason.map((d) => d.msg.replace(/^Value error, /, "")).join(" ");
+    throw new Error(reason || `The page's server answered ${response.status}.`);
+  }
+  return data;
+}
+function note(text, isError) {
+  const el = $("request-note");
+  el.textContent = text || "";
+  el.className = isError ? "error" : "muted";
+}
+
+/* ---- 1. The request ---- */
+function chooseFile(file) {
+  pendingFile = file || null;
+  $("drop-hint").textContent = file ? `${file.name} (${(file.size / 1e6).toFixed(1)} MB)` : "or drop it here";
+  if (file) $("source").value = "";
+}
+$("file").addEventListener("change", () => chooseFile($("file").files[0]));
+$("source").addEventListener("input", () => { if ($("source").value.trim()) { pendingFile = null; $("file").value = ""; chooseFile(null); } });
+const drop = $("drop");
+["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (e) => { if (e.dataTransfer.files.length) chooseFile(e.dataTransfer.files[0]); });
+document.addEventListener("dragover", (e) => e.preventDefault());
+document.addEventListener("drop", (e) => e.preventDefault());
+
+$("run").addEventListener("click", async () => {
+  const button = $("run");
+  button.disabled = true;
+  try {
+    let source = $("source").value.trim();
+    if (pendingFile) {
+      note(`Copying ${pendingFile.name} to the page's server…`);
+      source = (await api("POST", `/api/upload?name=${encodeURIComponent(pendingFile.name)}`, undefined, pendingFile)).path;
+    }
+    if (!source) throw new Error("Paste a Twitch link or drop a video file first.");
+    const clips = parseInt($("clips").value, 10);
+    if (!(clips >= 1 && clips <= 10)) throw new Error("Ask for 1 to 10 clips.");
+    const {id} = await api("POST", "/api/jobs", {source, clips, creator: $("creator").value.trim()});
+    note("");
+    await refreshJobs();
+    open(id);
+  } catch (e) {
+    note(e.message, true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+async function refreshJobs() {
+  let jobs = [];
+  try { jobs = await api("GET", "/api/jobs"); } catch (e) { return; }
+  const select = $("jobs");
+  select.innerHTML = '<option value="">—</option>' + jobs.map((j) =>
+    `<option value="${esc(j.id)}">${esc(j.id)} · ${esc(j.status.stage)}</option>`).join("");
+  if (current) select.value = current;
+}
+$("jobs").addEventListener("change", () => { if ($("jobs").value) open($("jobs").value); });
+
+/* ---- opening and polling a job ---- */
+function open(id) {
+  current = id;
+  shown = {};
+  if (location.hash !== `#${id}`) history.replaceState(null, "", `#${id}`);
+  $("jobs").value = id;
+  poll();
+}
+async function poll() {
+  clearTimeout(pollTimer);
+  const token = ++pollToken, id = current;
+  let job;
+  try {
+    job = await api("GET", `/api/jobs/${encodeURIComponent(id)}`);
+  } catch (e) {
+    if (token !== pollToken) return;
+    note(e.message, true);
+    return;
+  }
+  if (token !== pollToken || id !== current) return;
+  draw(job);
+  if (ACTIVE.includes(job.status.stage)) {
+    pollTimer = setTimeout(poll, 2000);
+  } else {
+    refreshJobs();
+  }
+}
+function changed(part, value) {
+  const key = JSON.stringify(value);
+  if (shown[part] === key) return false;
+  shown[part] = key;
+  return true;
+}
+
+let lastJob = null;
+function draw(job) {
+  lastJob = job;
+  if (changed("head", [job.stream, job.request])) drawHead(job);
+  if (changed("status", [job.status, !!job.stream, !!job.hotspots, !!job.picks, !!job.clips])) drawStages(job);
+  if (changed("notes", job.clips && job.clips.notes)) drawNotes(job);
+  if (changed("curve", [job.hotspots && job.hotspots.hotspots, job.judged && job.judged.map((r) => [r.n, r.rank])])) drawCurve(job);
+  if (changed("judged", job.judged)) drawCandidates(job);
+  if (changed("clips", [job.clips, job.status.stage === "done" ? job.status.updated : ""])) drawClips(job);
+}
+
+/* ---- 2. The stages ---- */
+function drawHead(job) {
+  const s = job.stream, r = job.request || {};
+  const title = $("stream-title"), extras = $("stream-extras");
+  if (s) {
+    const who = s.creator_name || s.creator_login;
+    title.className = "";
+    title.textContent = `${s.title || "Untitled stream"}${who ? " — " + who : ""} · ${length(s.duration)}`;
+    const missing = Object.entries(s.extras || {}).filter(([, v]) => v !== "ok")
+      .map(([k, v]) => `${k.replace("_", " ")} (${String(v).replace(/^missing:\s*/, "")})`);
+    extras.textContent = missing.length ? `Missing: ${missing.join("; ")}` : "";
+  } else {
+    title.className = "muted";
+    title.textContent = r.source ? r.source : current;
+    extras.textContent = "";
+  }
+}
+function drawStages(job) {
+  const st = job.status, stage = st.stage;
+  // A stage is done once a later one has started, or once its own files exist.
+  const filesDone = {find: !!job.hotspots, judge: !!job.picks, make: !!job.clips && stage === "done"};
+  const at = stage === "failed" ? ORDER.indexOf(st.step) : ORDER.indexOf(stage);
+  for (const el of document.querySelectorAll(".stage")) {
+    const name = el.dataset.stage, i = ORDER.indexOf(name);
+    let state = "waiting", step = "";
+    if (stage === "done") state = "done";
+    else if (stage === "failed" && i === at) { state = "failed"; step = st.detail || ""; }
+    else if (at >= 0 && i < at) state = "done";
+    else if (i === at && stage !== "failed") { state = "running"; step = [st.step, st.detail].filter(Boolean).join(" · "); }
+    else if (filesDone[name] && !(stage === "queued" && st.step === name)) state = "done";
+    if (stage === "queued" && st.step === name) { state = "waiting"; step = `queued: ${st.detail || "again"}`; }
+    el.className = `stage ${state}`;
+    el.querySelector(".state").textContent = {waiting: "waiting", running: "running…", done: "✓ done", failed: "✗ failed"}[state];
+    el.querySelector(".step").textContent = step;
+  }
+  const failure = $("failure");
+  if (stage === "failed") {
+    failure.style.display = "block";
+    failure.textContent = st.error || "The job failed without saying why.";
+  } else {
+    failure.style.display = "none";
+  }
+}
+function drawNotes(job) {
+  const notes = (job.clips && job.clips.notes) || [];
+  $("notes").innerHTML = notes.map((n) => `<li>${esc(n)}</li>`).join("");
+}
+
+/* ---- 3. The curve ---- */
+let curveCache = {id: null, data: null};
+async function drawCurve(job) {
+  const box = $("curve");
+  if (!job.hotspots) {
+    box.innerHTML = '<div class="empty" style="padding-top: 56px">The curve shows up here once the sound is scanned.</div>';
+    $("curve-length").textContent = job.stream ? length(job.stream.duration) : "—";
+    return;
+  }
+  if (curveCache.id !== current || !curveCache.data) {
+    try {
+      curveCache = {id: current, data: await api("GET", `/api/jobs/${encodeURIComponent(current)}/curve`)};
+    } catch (e) {
+      box.innerHTML = `<div class="empty" style="padding-top: 56px">${esc(e.message)}</div>`;
+      return;
+    }
+  }
+  renderCurve(job, curveCache.data);
+}
+function renderCurve(job, curve) {
+  const box = $("curve"), W = Math.max(200, box.clientWidth), H = 140, top = 8, base = 112;
+  const pts = curve.points, dur = curve.duration || pts.length || 1;
+  const x = (t) => (t / dur) * W;
+  const y = (v) => base - Math.max(0, Math.min(1, v)) * (base - top);
+  const step = W / Math.max(1, pts.length);
+  let line = "";
+  pts.forEach((v, i) => { line += `${i ? "L" : "M"}${(i * step + step / 2).toFixed(1)},${y(v).toFixed(1)}`; });
+  const area = pts.length ? `${line}L${W.toFixed(1)},${base}L0,${base}Z` : "";
+  const rows = {};
+  (job.judged || []).forEach((r) => { rows[r.n] = r; });
+  const marks = (job.hotspots.hotspots || []).map((h) => {
+    const r = rows[h.n] || {}, cx = x(h.peak);
+    const fill = r.rank ? "#d7ff3e" : r.keep === false ? "#c4c6ca" : "#ffffff";
+    return `<g class="mark" tabindex="0" data-n="${h.n}">` +
+      `<line x1="${cx.toFixed(1)}" y1="${top}" x2="${cx.toFixed(1)}" y2="${base}" stroke="#17181a" stroke-opacity=".18"></line>` +
+      `<polygon points="${(cx - 7).toFixed(1)},${base + 22} ${(cx + 7).toFixed(1)},${base + 22} ${cx.toFixed(1)},${base + 8}" fill="${fill}" stroke="#17181a" stroke-width="1.5"></polygon>` +
+      `<rect x="${(cx - 10).toFixed(1)}" y="${top}" width="20" height="${H - top}" fill="transparent"></rect></g>`;
+  }).join("");
+  box.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Excitement curve with ${(job.hotspots.hotspots || []).length} hot spots">` +
+    `<line x1="0" y1="${base}" x2="${W}" y2="${base}" stroke="#d9dadd"></line>` +
+    `<path d="${area}" fill="#17181a" fill-opacity=".08"></path>` +
+    `<path d="${line}" fill="none" stroke="#17181a" stroke-width="1.25"></path>${marks}</svg>`;
+  $("curve-length").textContent = length(dur);
+  const tip = $("tip");
+  for (const g of box.querySelectorAll(".mark")) {
+    const show = () => {
+      const h = job.hotspots.hotspots.find((s) => String(s.n) === g.dataset.n), r = rows[h.n] || {};
+      const fired = (h.fired || []).map((f) => esc(f.detail || `${f.signal} at ${clock(f.t)}`)).join("<br>") || "nothing recorded";
+      const verdict = r.rank ? `clip ${r.rank}` : r.keep === false ? "dropped" : r.keep ? "kept" : "not judged yet";
+      tip.innerHTML = `<b>#${String(h.n).padStart(2, "0")}</b> at ${clock(h.peak)} · ${esc(verdict)}<br>${fired}`;
+      tip.style.display = "block";
+      const wrap = $("curve-wrap").getBoundingClientRect(), mark = g.getBoundingClientRect();
+      const left = Math.min(Math.max(0, mark.left - wrap.left + mark.width / 2 - tip.offsetWidth / 2), wrap.width - tip.offsetWidth);
+      tip.style.left = `${left}px`;
+      tip.style.top = `${H + 4}px`;
+    };
+    g.addEventListener("mouseenter", show);
+    g.addEventListener("focus", show);
+    g.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+    g.addEventListener("blur", () => { tip.style.display = "none"; });
+    g.addEventListener("click", () => {
+      const row = document.querySelector(`.cand[data-n="${g.dataset.n}"]`);
+      if (row) { row.classList.add("open"); loadSheet(row); row.scrollIntoView({behavior: "smooth", block: "center"}); }
+    });
+  }
+}
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (curveCache.data && lastJob && lastJob.hotspots && curveCache.id === current) renderCurve(lastJob, curveCache.data); }, 150);
+});
+
+/* ---- 4. Candidates ---- */
+function drawCandidates(job) {
+  const box = $("candidates");
+  if (!job.judged) { box.innerHTML = '<div class="empty">The shortlist shows up here once find is done.</div>'; return; }
+  if (!job.judged.length) { box.innerHTML = '<div class="empty">No hot spots were found.</div>'; return; }
+  box.innerHTML = job.judged.map((r) => {
+    const tags = [];
+    if (r.rank) tags.push(`<span class="tag kept">clip ${r.rank}</span>`);
+    else if (r.keep === true) tags.push('<span class="tag kept">kept</span>');
+    if (r.keep === false) tags.push(r.rank ? '<span class="tag">judge dropped it</span>' : '<span class="tag dropped">dropped</span>');
+    if (r.weak) tags.push('<span class="tag weak">weak</span>');
+    if (r.keep == null && !r.rank) tags.push('<span class="tag dropped">not judged yet</span>');
+    const score = r.score != null ? `<span>${esc(r.score)}/10</span>` : "";
+    const fired = (r.fired || []).map((f) => f.detail || `${f.signal} at ${clock(f.t)}`).join(" · ");
+    return `<div class="cand" data-n="${r.n}" data-sheet="${esc(r.sheet || "")}" tabindex="0">` +
+      `<div class="cand-head"><span class="num">#${String(r.n).padStart(2, "0")}</span>${tags.join("")}${score}` +
+      `<span class="muted small">at ${clock(r.peak)}</span></div>` +
+      (r.reason ? `<div class="reason">“${esc(r.reason)}”</div>` : "") +
+      (fired ? `<div class="fired">${esc(fired)}</div>` : "") +
+      `<div class="sheet">${r.sheet ? "" : '<span class="empty">No contact sheet for this one.</span>'}</div></div>`;
+  }).join("");
+  for (const row of box.querySelectorAll(".cand")) {
+    const toggle = () => { row.classList.toggle("open"); loadSheet(row); };
+    row.addEventListener("click", toggle);
+    row.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+  }
+}
+function loadSheet(row) {
+  const sheet = row.querySelector(".sheet");
+  if (row.dataset.sheet && !sheet.querySelector("img")) {
+    sheet.innerHTML = `<img alt="Contact sheet for #${esc(row.dataset.n)}" src="${fileUrl(row.dataset.sheet)}">`;
+  }
+}
+
+/* ---- 4 and 5. Clips and their knobs ---- */
+function drawClips(job) {
+  const box = $("clips-out"), list = (job.clips && job.clips.clips) || [];
+  if (!list.length) {
+    box.innerHTML = `<div class="empty">${job.clips ? "No clip was made." : "Finished clips show up here once make is done."}</div>`;
+    return;
+  }
+  const again = encodeURIComponent(job.status.updated || "");
+  box.innerHTML = list.map((c) => {
+    const facts = [
+      `${c.score}/10`,
+      `${Number(c.duration).toFixed(1)} s`,
+      `${c.cuts} cut${c.cuts === 1 ? "" : "s"}, ${Number(c.seconds_cut).toFixed(1)} s removed`,
+      `sounds: ${(c.sounds || []).length ? c.sounds.join(", ") : "none"}`,
+      `from ${clock(c.source_start)} to ${clock(c.source_end)}`,
+    ];
+    if (c.layout && c.layout.length) facts.push(`layout: ${c.layout.join(", ")}`);
+    if (c.captions === false) facts.push("no captions");
+    return `<div class="clip" data-rank="${c.rank}">` +
+      `<video controls preload="metadata" playsinline src="${fileUrl("out/" + c.file)}?v=${again}#t=0.1"></video>` +
+      `<div class="clip-title">${c.rank}. ${esc(c.title)} ${c.weak ? '<span class="tag weak">weak</span>' : ""}</div>` +
+      `<div class="clip-facts">${facts.map(esc).join(" · ")}</div>` +
+      (c.reason ? `<div class="clip-facts">“${esc(c.reason)}”</div>` : "") +
+      (c.caption_file ? `<div class="clip-facts"><a href="${fileUrl("out/" + c.caption_file)}" target="_blank">caption and hashtags</a></div>` : "") +
+      `<div class="knobs">` +
+      `<div><label for="speed-${c.rank}">Speed</label><input type="number" id="speed-${c.rank}" class="speed" min="0.5" max="2" step="0.05" value="1.3"></div>` +
+      `<div><label for="dead-${c.rank}">Dead air (s)</label><input type="number" id="dead-${c.rank}" class="dead" min="0.1" max="5" step="0.1" value="0.5"></div>` +
+      `<label class="sounds"><input type="checkbox" class="snd" checked> Sounds on</label>` +
+      `<button class="plain again">Make again</button></div></div>`;
+  }).join("");
+  for (const card of box.querySelectorAll(".clip")) {
+    card.querySelector(".again").addEventListener("click", async (e) => {
+      const button = e.currentTarget;
+      button.disabled = true;
+      try {
+        await api("POST", `/api/jobs/${encodeURIComponent(current)}/clips/${card.dataset.rank}/remake`, {
+          speed: parseFloat(card.querySelector(".speed").value),
+          dead_air: parseFloat(card.querySelector(".dead").value),
+          sounds: card.querySelector(".snd").checked,
+        });
+        note(`Clip ${card.dataset.rank} is being made again.`);
+        poll();
+      } catch (err) {
+        note(err.message, true);
+        button.disabled = false;
+      }
+    });
+  }
+}
+
+refreshJobs().then(() => {
+  const id = decodeURIComponent(location.hash.slice(1));
+  if (id) open(id);
+});
+</script>
+</body>
+</html>

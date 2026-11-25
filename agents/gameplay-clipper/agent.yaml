@@ -1,0 +1,89 @@
+# agent.yaml: the whole agent in one file; see `starwish guide building-an-agent`.
+# Before every upload: `bash agents/gameplay-clipper/build.sh` (the engine's wheel and the judge's files).
+# price and max_response_time were set last, by Yuki, on 2026-11-24, from `starwish price .`.
+name: gameplay-clipper
+display_name: Gameplay Clipper
+version: 1.0.0                  # every publish needs a new one
+description: >-
+  Send one past Twitch broadcast and get back finished vertical clips of its loudest, funniest
+  moments, ready to post to TikTok, Shorts and Reels. Each clip is 1080x1920 and 15 to 40 seconds
+  long, with the streamer's face above the game, a title, big captions, a creator tag and sound
+  effects on the beats. Each clip also comes with a caption to paste and hashtags, and clips.json
+  lists them best first with a score and the reason it was picked. One request covers one past
+  Twitch broadcast (a link to a finished video, not a live channel) or one video file, up to 6
+  hours long, and 1 to 10 clips, 6 by default. When a stream has few strong moments it still
+  returns clips and marks the weaker ones as weak. It works with nobody reviewing in between. It
+  is built for English-language streams. Clip only streams you own or have permission to clip.
+price: 1000                     # stars a request; Yuki's choice (2026-11-24)
+max_response_time: 1h30m        # Yuki's choice (2026-11-24); sized for a 6-hour stream on the slower machine
+# The harness: Starwish's Claude Code preset. It only drives the engine (prompt.md), so a mid-size
+# model is enough. Its model key, ANTHROPIC_API_KEY, stays in the harness's VM.
+harness:
+  preset: claude-code
+  model: claude-sonnet-5-5
+# The workspace VM, where every heavy step runs: download, sound scan, speech-to-text, framing
+# and rendering. Its install also fetches the models. It never holds a credential.
+workspace:
+  install: ./install.sh
+inputs:
+  description: A link to one past Twitch broadcast, or one video file, and how many clips to make.
+  params:
+    type: object
+    properties:
+      url:
+        type: string
+        description: The link to one past Twitch broadcast, like https://www.twitch.tv/videos/1234567890
+      clips:
+        type: integer
+        minimum: 1
+        maximum: 10
+        default: 6
+        description: How many clips to make
+      creator:
+        type: string
+        maxLength: 60
+        description: The creator's name for the tag on each clip, when the source does not give one
+    examples:
+      - { url: "https://www.twitch.tv/videos/1234567890", clips: 6 }
+  files:
+    - accept: [video/mp4, video/quicktime, video/x-matroska, video/webm]
+      required: false
+      max_count: 1
+outputs:
+  description: Finished vertical clips, best first, each with a caption file, and clips.json listing them
+  files:
+    - name: clips.json          # optional: a refusal writes nothing and only explains why
+      type: application/json
+      required: false
+    - name: "*.mp4"
+      type: video/mp4
+      required: false
+    - name: "*.txt"
+      type: text/plain
+      required: false
+# tools: programs that need a credential. Each runs in the harness's VM as its own Linux user,
+# with only the credentials listed under it; the model calls it by name.
+tools:
+  - name: judge
+    run: ./tools/judge          # judge_call.py beside it is streamclip/judge/call.py, copied by build.sh
+    description: Judges the shortlisted moments. Call it once, after `streamclip find` has finished.
+    credentials:
+      JUDGE_ANTHROPIC_KEY: { hosts: [api.anthropic.com], header: "x-api-key: {value}" }
+    actions:                    # the only call the model can make: it passes no arguments
+      - name: run
+        description: Judge the moments `streamclip find` shortlisted in /job/work
+        args: []
+# Tests: a version is listed only after these pass. The sample is a stand-in stream for tests
+# only (tests/SOURCES.md); nothing made from it is described or shown anywhere public.
+tests:
+  - name: sample-two-clips
+    request: "Make 2 clips from this stream recording"
+    params: { clips: 2 }
+    input: ./tests/sample-stream.mp4
+    must: "produces clips.json listing at least one clip, and for every clip it lists a vertical .mp4 video and a .txt caption file with the same name"
+  - name: refuses-a-channel-link
+    request: "Clip https://www.twitch.tv/twitch"
+    must: "produces no .mp4 file and says it needs the link of one finished past broadcast, not a channel"
+  - name: asks-for-input-when-there-is-none
+    request: "Make me some clips"
+    must: "produces no .mp4 file and says it needs a link to a past Twitch broadcast or a video file"

@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+"""The `judge` tool, run on Starwish's harness machine. Standard library only.
+
+It reads the job folder the workspace machine's engine wrote (/job/work there, which this
+machine sees read-only at /job/files/work) and writes judge_raw.json into the tool's own
+output folder, which Starwish copies back to the workspace machine under /job/tool-output/.
+
+judge_call.py, prompt.md and answer_schema.json beside this file are copies of
+streamclip/judge/'s, made by build.sh. Exit codes are judge_call.main's: 0 the answer was
+written, 2 nothing to judge, 3 no usable answer after two tries, 4 the key missing or rejected.
+"""
+
+import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import judge_call  # noqa: E402  (found beside this file)
+
+JOB = "/job/files/work"
+
+
+def main() -> int:
+    out = os.environ.get("STARWISH_OUTPUT_DIR", "").strip()
+    if not out:
+        print("judge: STARWISH_OUTPUT_DIR is not set, so there is nowhere to write the answer",
+              file=sys.stderr)
+        return 2
+    return judge_call.main([JOB, out])
+
+
+if __name__ == "__main__":
+    sys.exit(main())
