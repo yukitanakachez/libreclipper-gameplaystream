@@ -11,6 +11,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
+      # Ubuntu's ffmpeg brings the system libraries; the engine itself runs on the pinned
+      # static 9.0.2 build (as on Starwish), which leaves the sound a few frames off with 8.0.1.
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: uv sync --extra stream
+      - run: .venv/bin/python -c "from clipper import provision, shell; provision._install_ffmpeg(); assert shell.ffmpeg() != 'ffmpeg' and provision.ffmpeg_ok(); print('ffmpeg:', shell.ffmpeg())"
       - run: .venv/bin/python -m pytest tests/stream

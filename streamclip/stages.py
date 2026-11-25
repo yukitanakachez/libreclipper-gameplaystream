@@ -554,16 +554,19 @@ def warm(progress=print) -> None:
         windows.ensure_model()
         report.step("the face model", "Face model…")
         provision.ensure(("model",))
-        if not _ffmpeg_has_subtitles():
-            report.step("ffmpeg", "An ffmpeg that can burn in captions…")
-            provision.ensure(("ffmpeg",))
+        if _ffmpeg_from_path():
+            report.step("ffmpeg", "The ffmpeg the engine is tested with…")
+            try:
+                provision._install_ffmpeg()
+            except provision.ProvisionError:
+                if not provision.ffmpeg_ok():
+                    raise
+                progress("No ffmpeg download for this system; using the one on the PATH.")
     progress("Models are ready.")
 
 
-def _ffmpeg_has_subtitles() -> bool:
-    """Whether the ffmpeg in use can burn in captions (built with libass). Many system builds,
-    Homebrew's slimmer ones among them, can't, and every clip needs it."""
-    try:
-        return " subtitles " in shell.run([shell.ffmpeg(), "-hide_banner", "-filters"], timeout=30)
-    except Exception:
-        return False
+def _ffmpeg_from_path() -> bool:
+    """Whether the engine would fall back to whatever ffmpeg is on the PATH. Every test runs
+    against the pinned static 9.0.2 build: distro builds have crashed mid-render (Debian's 7.1)
+    or cut the sound a few frames off the picture (Ubuntu's 8.0.1), and some lack libass."""
+    return shell.ffmpeg() == "ffmpeg"

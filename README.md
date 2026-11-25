@@ -25,9 +25,9 @@ the open-source podcast clipper, released on its own.
 ## Get started
 
 You need Python 3.11+, [uv](https://docs.astral.sh/uv/) and an
-[Anthropic API key](https://console.anthropic.com/). It runs on macOS and Linux. If your
-FFmpeg can't burn in captions (it needs libass), `streamclip warm` downloads a pinned build
-into the project folder.
+[Anthropic API key](https://console.anthropic.com/). It runs on macOS and Linux.
+`streamclip warm` downloads the FFmpeg it is tested with (a pinned static 9.0.2 build with
+libass) into the project folder, so you don't need your own.
 
 ```bash
 git clone https://github.com/yukitanakachez/libreclipper-gameplaystream.git

@@ -66,20 +66,21 @@ def test_warm_asks_each_lane_for_its_model(monkeypatch):
     monkeypatch.setattr("streamclip.signals.ensure_model", lambda: called.append("sound"))
     monkeypatch.setattr("streamclip.windows.ensure_model", lambda: called.append("speech"))
     monkeypatch.setattr("clipper.provision.ensure", lambda items=(): called.append(items))
-    monkeypatch.setattr(stages, "_ffmpeg_has_subtitles", lambda: True)
+    monkeypatch.setattr(stages, "_ffmpeg_from_path", lambda: False)
     lines = []
     stages.warm(progress=lines.append)
     assert called == ["sound", "speech", ("model",)] and lines[-1] == "Models are ready."
 
 
-def test_warm_fetches_an_ffmpeg_when_the_one_in_use_cannot_burn_captions(monkeypatch):
+def test_warm_fetches_the_pinned_ffmpeg_when_only_the_system_one_is_there(monkeypatch):
     called = []
     monkeypatch.setattr("streamclip.signals.ensure_model", lambda: None)
     monkeypatch.setattr("streamclip.windows.ensure_model", lambda: None)
     monkeypatch.setattr("clipper.provision.ensure", lambda items=(): called.append(items))
-    monkeypatch.setattr(stages, "_ffmpeg_has_subtitles", lambda: False)
+    monkeypatch.setattr("clipper.provision._install_ffmpeg", lambda: called.append("ffmpeg"))
+    monkeypatch.setattr(stages, "_ffmpeg_from_path", lambda: True)
     stages.warm(progress=lambda line: None)
-    assert called == [("model",), ("ffmpeg",)]
+    assert called == [("model",), "ffmpeg"]
 
 
 @pytest.mark.live
